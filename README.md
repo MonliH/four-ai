@@ -1,4 +1,4 @@
-# Four Square AI
+# Connect Four AI
 
 <img src="./images/front_page.png" alt="Game Image" height=350/>
 
