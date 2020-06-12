@@ -69,7 +69,7 @@ impl fmt::Display for Board {
             " {} ",
             (0..self.positions.len() * 5 - 1)
                 .map(|x| if x % 5 == 0 {
-                    ((x + 1) / 5).to_string()
+                    ((x + 1) / 5 + 1).to_string()
                 } else {
                     " ".to_string()
                 })

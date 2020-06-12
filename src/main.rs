@@ -22,7 +22,7 @@ fn main() {
         crossover_amount => 1,
         structure => vec![42, 128, 256, 128, 7],
         activations => vec! [
-            ai::nn::Activation::ELU,
+            ai::nn::Activation::Sigmoid,
             ai::nn::Activation::ELU,
             ai::nn::Activation::ELU,
             ai::nn::Activation::Sigmoid,

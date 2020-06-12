@@ -1,3 +1,4 @@
 /target
 saves/
 Cargo.lock
+.DS_Store
