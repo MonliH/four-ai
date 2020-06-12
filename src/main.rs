@@ -28,7 +28,7 @@ fn main() {
             ai::nn::Activation::Sigmoid,
         ],
         generations => 10000,
-        save_amount => 10,
+        save_interval => 10,
         file_path => path::PathBuf::from("./saves/gen")
     };
 

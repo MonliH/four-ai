@@ -86,7 +86,7 @@ pub struct PoolProperties {
 
     pub generations: usize,
 
-    pub save_amount: usize,
+    pub save_interval: usize,
     pub file_path: path::PathBuf,
 }
 
@@ -309,7 +309,7 @@ impl Pool {
                 .collect::<Vec<_>>();
             self.agents.clear();
 
-            if self.generation % self.properties.save_amount == 0 {
+            if self.generation % self.properties.save_interval == 0 {
                 print!(
                     "{}Writing generation {}... {}",
                     BLUE!(),
