@@ -10,7 +10,6 @@ use serde_cbor;
 
 use std::cmp::Ordering;
 use std::error::Error;
-use std::fs;
 use std::fs::{create_dir_all, File};
 use std::path;
 use std::sync::{Arc, Mutex};

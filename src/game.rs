@@ -392,7 +392,7 @@ pub fn play_against_ai(ai_path: &path::Path) -> Result<(), Box<dyn Error>> {
                     .unwrap_or((0, &(0, &1.0)));
 
                 match board.insert_top((idx.1).0, current_player) {
-                    (true, Some(win)) => {
+                    (true, Some(_)) => {
                         break 'outer;
                     }
                     (true, None) => {
