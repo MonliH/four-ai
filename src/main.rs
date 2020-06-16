@@ -17,7 +17,7 @@ use std::io::{stdin, stdout, Write};
 
 fn main() {
     loop {
-        print!("1) Play against the latest AI\n2) Play against another person (local)\n3) Train the ai\n\nEnter the code: ");
+        print!("{}1) Play against the latest AI\n{}2) Play against another person (local)\n{}3) Train the ai{}\n\nEnter the code: ", BLUE!(), GREEN!(), RED!(), RESET!());
     
         stdout().flush().expect("Failed to flush to stdout");
         let mut command = String::new();
@@ -70,7 +70,7 @@ fn main() {
             }
 
             _ => {
-                eprintln!("Invalid command: `{}`", command);
+                println!("\x1b[2J\x1b[HInvalid option `{}`\n", command);
             }
         }
     }
