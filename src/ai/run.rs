@@ -1,7 +1,7 @@
 use crate::ai::nn;
 use crate::game;
 use crate::helpers;
-use crate::rand::Rng;
+use rand::Rng;
 
 use rayon::prelude::*;
 

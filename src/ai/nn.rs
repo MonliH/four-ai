@@ -1,5 +1,5 @@
 use crate::ai::matrix;
-use crate::rand::Rng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

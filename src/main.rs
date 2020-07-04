@@ -14,6 +14,7 @@ extern crate serde_cbor;
 use crate::ai::run::PoolProperties;
 use std::path;
 use std::io::{stdin, stdout, Write};
+use std::fs::create_dir_all;
 
 fn main() {
     loop {
@@ -57,6 +58,8 @@ fn main() {
                     save_interval => 10,
                     file_path => path::PathBuf::from("./saves/gen")
                 };
+
+                create_dir_all("saves/").expect("Failed create new saves folder");
 
                 let mut pool = ai::run::Pool::new(props);
                 match pool.start() {
