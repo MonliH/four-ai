@@ -2,30 +2,35 @@
 mod color;
 
 #[macro_use]
-pub mod ai;
+mod ai;
 mod game;
-pub mod helpers;
+mod helpers;
+
+mod matrix;
 
 extern crate rand;
 extern crate rayon;
 extern crate serde;
 extern crate serde_cbor;
 
-use crate::ai::run::PoolProperties;
-use std::path;
-use std::io::{stdin, stdout, Write};
+use crate::ai::{ nn_agent, pool::{Pool, PoolProperties} };
+
 use std::fs::create_dir_all;
+use std::io::{stdin, stdout, Write};
+use std::path;
 
 fn main() {
     loop {
         print!("{}1) Play against the latest AI\n{}2) Play against another person (local)\n{}3) Train the ai{}\n\nEnter the code: ", BLUE!(), GREEN!(), RED!(), RESET!());
-    
+
         stdout().flush().expect("Failed to flush to stdout");
         let mut command = String::new();
-        stdin().read_line(&mut command).expect("Did not enter a correct string");
+        stdin()
+            .read_line(&mut command)
+            .expect("Did not enter a correct string");
 
         command = command.chars().filter(|c| !c.is_whitespace()).collect();
-        
+
         match &command[..] {
             "1" => {
                 match game::play_against_ai(path::Path::new("./saves/gen")) {
@@ -38,7 +43,7 @@ fn main() {
             }
 
             "2" => {
-                game::start_two_player(); 
+                game::start_two_player();
             }
 
             "3" => {
@@ -61,15 +66,14 @@ fn main() {
 
                 create_dir_all("saves/").expect("Failed create new saves folder");
 
-                let mut pool = ai::run::Pool::new(props);
+                let mut pool: Pool<nn_agent::NNAgent> = Pool::new(props);
                 match pool.start() {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{}Failed: {}", RED!(), e);
                         std::process::exit(1);
                     }
-                }    
-
+                }
             }
 
             _ => {

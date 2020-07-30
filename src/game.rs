@@ -6,7 +6,8 @@ use std::io::{self, BufRead};
 use std::path;
 use std::process;
 
-use crate::ai::run::Agent;
+use crate::ai::agent::Player;
+use crate::ai::nn_agent::NNAgent;
 use crate::helpers;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -320,11 +321,11 @@ pub fn play_against_ai(ai_path: &path::Path) -> Result<(), Box<dyn Error>> {
     let ai_turn = Spot::YELLOW;
     let mut fail = "";
 
-    let nn: Agent = match helpers::get_max_generation(ai_path)? {
+    let nn: NNAgent = match helpers::get_max_generation(ai_path)? {
         Some(dir) => {
             let path = dir.path();
             let file = File::open(path)?;
-            serde_cbor::from_reader::<Vec<Agent>, _>(file)?.remove(0)
+            serde_cbor::from_reader::<Vec<NNAgent>, _>(file)?.remove(0)
         }
         None => {
             println!("Error, no file exists.");

@@ -2,7 +2,9 @@
 mod color;
 
 #[macro_use]
-pub mod ai;
-mod game;
-pub mod helpers;
+mod ai;
 
+mod game;
+mod helpers;
+
+pub mod matrix;

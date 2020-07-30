@@ -1,4 +1,4 @@
-use crate::ai::matrix;
+use crate::matrix;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;

@@ -1,11 +1,13 @@
-use crate::ai::nn;
+use crate::ai::{
+    agent::{Agent, Player},
+    nn,
+};
 use crate::game;
 use crate::helpers;
-use rand::Rng;
 
 use rayon::prelude::*;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_cbor;
 
 use std::cmp::Ordering;
@@ -13,51 +15,6 @@ use std::error::Error;
 use std::fs::{create_dir_all, File};
 use std::path;
 use std::sync::{Arc, Mutex};
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Agent {
-    fitness: i32,
-    nn: nn::NN,
-}
-
-impl Agent {
-    fn new(structure: Vec<usize>, activations: Vec<nn::Activation>) -> Agent {
-        Agent {
-            fitness: 0,
-            nn: nn::NN::new_rand(structure, activations),
-        }
-    }
-
-    pub fn get_move(&self, board: [[game::Spot; 6]; 7]) -> Vec<f64> {
-        let flattened_board = board
-            .iter()
-            .flatten()
-            .map(|x| x.into_rep())
-            .collect::<Vec<_>>();
-
-        self.nn.forward(flattened_board).T().values.remove(0)
-    }
-
-    fn mutate(&mut self, mutation_range: f64) {
-        let mut rng = rand::thread_rng();
-        for i in 0..self.nn.weights.len() {
-            self.nn.weights[i].map(&mut |x| x + rng.gen_range(-mutation_range, mutation_range));
-        }
-    }
-
-    fn crossover(&mut self, other: &Agent) {
-        let mut rng = rand::thread_rng();
-        for i in 0..self.nn.weights.len() {
-            self.nn.weights[i].map_enumerate(&mut |j, k, x| {
-                if rng.gen_range(0.0, 1.0) > 0.7 {
-                    other.nn.weights[i].get(j, k)
-                } else {
-                    x
-                }
-            });
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct PoolProperties {
@@ -106,20 +63,23 @@ macro_rules! pool_props {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Pool {
-    agents: Vec<Agent>,
+pub struct Pool<Plr: Player> {
+    agents: Vec<Agent<Plr>>,
     generation: usize,
     properties: PoolProperties,
 }
 
-impl Pool {
-    pub fn new(properties: PoolProperties) -> Self {
+impl<'a, Plr> Pool<Plr>
+where
+    Plr: Player + Clone + Serialize + DeserializeOwned + Sync + Send,
+{
+    pub fn new(properties: PoolProperties) -> Pool<Plr> {
         let mut agents = Vec::with_capacity(properties.total_pop.unwrap());
         for _ in 0..properties.total_pop.unwrap() {
-            agents.push(Agent::new(
+            agents.push(Agent::new(Plr::new_from_param(
                 properties.structure.clone(),
                 properties.activations.clone(),
-            ))
+            )))
         }
 
         Pool {
@@ -129,7 +89,7 @@ impl Pool {
         }
     }
 
-    fn play(&self, player1: &Agent, player2: &Agent) -> (game::Spot, i32) {
+    fn play(&self, player1: &Agent<Plr>, player2: &Agent<Plr>) -> (game::Spot, i32) {
         let mut board = game::Board::new();
         let mut current_color = game::Spot::RED;
         let mut moves = 0;
@@ -137,9 +97,9 @@ impl Pool {
 
         'outer: loop {
             let temp = if current_color == game::Spot::RED {
-                player1.get_move(board.positions)
+                player1.player.get_move(board.positions)
             } else {
-                player2.get_move(board.positions)
+                player2.player.get_move(board.positions)
             };
 
             let mut ai_moves = temp.iter().enumerate().collect::<Vec<_>>();
@@ -213,18 +173,18 @@ impl Pool {
         (x + temp1, y + temp2)
     }
 
-    fn mutate_crossover(&mut self, new_pop: &mut Vec<Agent>) {
+    fn mutate_crossover(&mut self, new_pop: &mut Vec<Agent<Plr>>) {
         for i in 0..new_pop.len() {
             for k in 0..new_pop.len() {
                 if i != k {
                     for _ in 0..self.properties.crossover_amount {
                         let mut breed_agent = new_pop[i].clone();
-                        breed_agent.crossover(&new_pop[k]);
+                        breed_agent.player.crossover(&new_pop[k].player);
 
                         for _ in 0..self.properties.mutation_amount {
                             // Yes 4 nested for loops
                             let mut mutated_agent = breed_agent.clone();
-                            mutated_agent.mutate(self.properties.mutation_range);
+                            mutated_agent.player.mutate(self.properties.mutation_range);
 
                             mutated_agent.fitness = 0;
                             self.agents.push(mutated_agent);
@@ -256,7 +216,7 @@ impl Pool {
                     RESET!()
                 );
                 let file = File::open(val.path())?;
-                let mut new_pop = serde_cbor::from_reader(file)?;
+                let mut new_pop: Vec<Agent<Plr>> = serde_cbor::from_reader(file)?;
                 self.mutate_crossover(&mut new_pop);
                 println!("{}Loaded generations{}", BLUE!(), RESET!());
                 println!(
