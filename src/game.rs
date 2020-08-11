@@ -139,12 +139,8 @@ impl Board {
             .filter_map(|x| x)
             .collect::<Vec<_>>()[..]
         {
-            [winner] => {
-                if winner != Spot::EMPTY {
-                    Some(winner)
-                } else {
-                    None
-                }
+            [winner] if winner != Spot::EMPTY => {
+                Some(winner)
             }
             _ => None,
         }
