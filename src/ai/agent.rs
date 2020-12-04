@@ -24,4 +24,3 @@ where
         Self { fitness: 0, player }
     }
 }
-

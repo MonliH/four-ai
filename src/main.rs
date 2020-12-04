@@ -13,7 +13,10 @@ extern crate rayon;
 extern crate serde;
 extern crate serde_cbor;
 
-use crate::ai::{ nn_agent, pool::{Pool, PoolProperties} };
+use crate::ai::{
+    nn_agent,
+    pool::{Pool, PoolProperties},
+};
 
 use std::fs::create_dir_all;
 use std::io::{stdin, stdout, Write};
