@@ -1,5 +1,6 @@
 pub mod agent;
-pub mod nn_agent;
+mod nn_player;
+mod random_player;
 
 pub mod nn;
 
@@ -7,3 +8,5 @@ pub mod nn;
 pub mod pool;
 
 use agent::Player;
+pub use nn_player::NNPlayer;
+pub use random_player::RandomPlayer;

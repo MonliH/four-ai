@@ -14,8 +14,8 @@ extern crate serde;
 extern crate serde_cbor;
 
 use crate::ai::{
-    nn_agent,
     pool::{Pool, PoolProperties},
+    NNPlayer,
 };
 
 use std::fs::create_dir_all;
@@ -24,7 +24,19 @@ use std::path;
 
 fn main() {
     loop {
-        print!("{}1) Play against the latest AI\n{}2) Play against another person (local)\n{}3) Train the ai{}\n\nEnter the code: ", BLUE!(), GREEN!(), RED!(), RESET!());
+        print!(
+            r#"{}1) Play against the latest AI
+{}2) Play against another person (local)
+{}3) Train the ai
+{}q) Exit{}
+
+Enter the code: "#,
+            BLUE!(),
+            GREEN!(),
+            RED!(),
+            CYAN!(),
+            RESET!()
+        );
 
         stdout().flush().expect("Failed to flush to stdout");
         let mut command = String::new();
@@ -36,7 +48,7 @@ fn main() {
 
         match &command[..] {
             "1" => {
-                match game::play_against_ai(path::Path::new("./saves/gen")) {
+                match game::play_against_ai::<NNPlayer>(path::Path::new("./saves/gen")) {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{}Failed: {}", RED!(), e);
@@ -64,12 +76,13 @@ fn main() {
                     ],
                     generations => 10000,
                     save_interval => 10,
+                    compare_interval => 1,
                     file_path => path::PathBuf::from("./saves/gen")
                 };
 
                 create_dir_all("saves/").expect("Failed create new saves folder");
 
-                let mut pool: Pool<nn_agent::NNAgent> = Pool::new(props);
+                let mut pool: Pool<NNPlayer> = Pool::new(props);
                 match pool.start() {
                     Ok(_) => {}
                     Err(e) => {
@@ -77,6 +90,11 @@ fn main() {
                         std::process::exit(1);
                     }
                 }
+            }
+
+            "q" | "Q" => {
+                println!("Quitting...");
+                std::process::exit(0);
             }
 
             _ => {

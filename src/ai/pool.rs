@@ -1,20 +1,20 @@
-use crate::ai::{
-    agent::{Agent, Player},
-    nn,
-};
-use crate::game;
-use crate::helpers;
+use std::cmp::Ordering;
+use std::error::Error;
+use std::fs::{create_dir_all, File};
+use std::path;
+use std::sync::{Arc, Mutex};
 
 use rayon::prelude::*;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_cbor;
 
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fs::{create_dir_all, File};
-use std::path;
-use std::sync::{Arc, Mutex};
+use crate::ai::{
+    agent::{Agent, Player},
+    nn, RandomPlayer,
+};
+use crate::game;
+use crate::helpers;
 
 #[derive(Serialize, Deserialize)]
 pub struct PoolProperties {
@@ -43,6 +43,7 @@ pub struct PoolProperties {
     pub generations: usize,
 
     pub save_interval: usize,
+    pub compare_interval: usize,
     pub file_path: path::PathBuf,
 }
 
@@ -89,7 +90,11 @@ where
         }
     }
 
-    fn play(&self, player1: &Agent<Plr>, player2: &Agent<Plr>) -> (game::Spot, i32) {
+    fn play<P1: Player, P2: Player>(
+        &self,
+        player1: &Agent<P1>,
+        player2: &Agent<P2>,
+    ) -> (game::Spot, i32) {
         let mut board = game::Board::new();
         let mut current_color = game::Spot::RED;
         let mut moves = 0;
@@ -136,10 +141,11 @@ where
         (winner, moves)
     }
 
-    fn get_fitness(&self, i: usize, j: usize) -> (i32, i32) {
-        let player1 = &self.agents[i];
-        let player2 = &self.agents[j];
-
+    fn get_fitness<P1: Player, P2: Player>(
+        &self,
+        player1: &Agent<P1>,
+        player2: &Agent<P2>,
+    ) -> (i32, i32) {
         let (x, y) = match self.play(player1, player2) {
             (game::Spot::RED, moves) => {
                 // player1 wins
@@ -248,7 +254,7 @@ where
                     for j in 0..self.agents.len() {
                         if i != j {
                             // Play against each other
-                            let fitnesses = self.get_fitness(i, j);
+                            let fitnesses = self.get_fitness(&self.agents[i], &self.agents[j]);
                             let mut obj = fitness_diffs.lock().unwrap();
                             obj[i] += fitnesses.0;
                             obj[j] += fitnesses.1;
@@ -295,6 +301,23 @@ where
                     self.generation,
                     RESET!()
                 );
+            }
+
+            if self.generation % self.properties.compare_interval == 0 {
+                print!(
+                    "{}Calculating fitness relative to population...{} ",
+                    BLUE!(),
+                    RESET!()
+                );
+                let mut random_fitness = 0;
+                for agent in self.agents.iter() {
+                    let fitness_first = self.get_fitness(agent, &Agent::new(RandomPlayer::new())).0;
+                    let fitness_second =
+                        self.get_fitness(&Agent::new(RandomPlayer::new()), agent).1;
+                    random_fitness += fitness_first;
+                    random_fitness += fitness_second;
+                }
+                println!("{}Fitness of {}{}", GREEN!(), random_fitness, RESET!());
             }
 
             print!(

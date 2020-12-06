@@ -6,15 +6,13 @@ use crate::ai::Player;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NNAgent {
-    fitness: i32,
+pub struct NNPlayer {
     nn: nn::NN,
 }
 
-impl Player for NNAgent {
+impl Player for NNPlayer {
     fn new_from_param(structure: Vec<usize>, activations: Vec<nn::Activation>) -> Self {
-        NNAgent {
-            fitness: 0,
+        Self {
             nn: nn::NN::new_rand(structure, activations),
         }
     }

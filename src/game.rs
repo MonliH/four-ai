@@ -6,8 +6,9 @@ use std::io::{self, BufRead};
 use std::path;
 use std::process;
 
-use crate::ai::agent::Player;
-use crate::ai::nn_agent::NNAgent;
+use serde::de::DeserializeOwned;
+
+use crate::ai::agent::{Agent, Player};
 use crate::helpers;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -309,17 +310,21 @@ pub fn start_two_player() {
     println!("\x1b[2J\x1b[H{}{} Wins!", board, current_player.display());
 }
 
-pub fn play_against_ai(ai_path: &path::Path) -> Result<(), Box<dyn Error>> {
+pub fn play_against_ai<Plr: Player + DeserializeOwned>(
+    ai_path: &path::Path,
+) -> Result<(), Box<dyn Error>> {
     let mut board = Board::new();
     let mut current_player = Spot::RED;
     let ai_turn = Spot::YELLOW;
     let mut fail = "";
 
-    let nn: NNAgent = match helpers::get_max_generation(ai_path)? {
+    let nn: Plr = match helpers::get_max_generation(ai_path)? {
         Some(dir) => {
             let path = dir.path();
             let file = File::open(path)?;
-            serde_cbor::from_reader::<Vec<NNAgent>, _>(file)?.remove(0)
+            serde_cbor::from_reader::<Vec<Agent<Plr>>, _>(file)?
+                .remove(0)
+                .player
         }
         None => {
             println!("Error, no file exists.");
