@@ -65,7 +65,7 @@ Enter the code: "#,
                 let props = pool_props! {
                     surviving_amount => 7,
                     mutation_amount => 3,
-                    mutation_range => 0.05
+                    mutation_range => 0.05,
                     crossover_amount => 1,
                     structure => vec![42, 91, 91, 91, 7],
                     activations => vec! [
