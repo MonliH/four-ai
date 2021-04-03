@@ -65,7 +65,7 @@ Enter the code: "#,
                 let props = pool_props! {
                     surviving_amount => 7,
                     mutation_amount => 3,
-                    mutation_range => 0.001,
+                    mutation_range => 0.05
                     crossover_amount => 1,
                     structure => vec![42, 91, 91, 91, 7],
                     activations => vec! [
@@ -75,7 +75,7 @@ Enter the code: "#,
                         ai::nn::Activation::Sigmoid,
                     ],
                     generations => 100000000,
-                    save_interval => 500,
+                    save_interval => 250,
                     compare_interval => 100000000000000,
                     file_path => path::PathBuf::from("./saves/gen")
                 };

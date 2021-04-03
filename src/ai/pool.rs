@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{Reverse, Ordering};
 use std::error::Error;
 use std::fs::{create_dir_all, File};
 use std::path;
@@ -143,11 +143,11 @@ where
         let (x, y) = match self.play(player1, player2) {
             game::Spot::RED => {
                 // player1 wins
-                (3, 0)
+                (3, -3)
             }
             game::Spot::YELLOW => {
                 // player2 wins
-                (0, 3)
+                (-3, 3)
             }
             game::Spot::EMPTY => {
                 // tie
@@ -158,11 +158,11 @@ where
         let (temp2, temp1) = match self.play(player2, player1) {
             game::Spot::RED => {
                 // player1 wins
-                (3, 0)
+                (3, -3)
             }
             game::Spot::YELLOW => {
                 // player2 wins
-                (0, 3)
+                (-3, 3)
             }
             game::Spot::EMPTY => {
                 // tie
@@ -194,6 +194,9 @@ where
             }
         }
 
+        for agent in new_pop.iter_mut() {
+            agent.fitness = 0;
+        }
         self.agents.append(new_pop);
     }
 
@@ -245,15 +248,18 @@ where
             let fitness_diffs = Arc::new(Mutex::new(vec![0; self.agents.len()]));
             (0..self.agents.len()).into_par_iter().for_each(|i| {
                 {
+                    let mut i_fitness_delta = 0;
                     for j in 0..self.agents.len() {
                         if i != j {
                             // Play against each other
                             let fitnesses = self.get_fitness(&self.agents[i], &self.agents[j]);
+                            i_fitness_delta += fitnesses.0;
                             let mut obj = fitness_diffs.lock().unwrap();
-                            obj[i] += fitnesses.0;
                             obj[j] += fitnesses.1;
                         }
                     }
+                    let mut obj = fitness_diffs.lock().unwrap();
+                    obj[i] += i_fitness_delta;
                 }
             });
 
@@ -261,7 +267,7 @@ where
                 self.agents[i].fitness += fitness_dif;
             }
 
-            self.agents.sort_unstable_by_key(|x| x.fitness);
+            self.agents.sort_unstable_by_key(|x| Reverse(x.fitness));
             let mut new_pop = self
                 .agents
                 .drain(0..self.properties.surviving_amount)
