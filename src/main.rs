@@ -63,7 +63,7 @@ Enter the code: "#,
 
             "3" => {
                 let props = pool_props! {
-                    surviving_amount => 5,
+                    surviving_amount => 7,
                     mutation_amount => 3,
                     mutation_range => 0.001,
                     crossover_amount => 1,
