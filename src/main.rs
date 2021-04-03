@@ -18,88 +18,153 @@ use crate::ai::{
     NNPlayer,
 };
 
-use std::fs::create_dir_all;
-use std::io::{stdin, stdout, Write};
-use std::path;
+use ai::nn::Activation;
+use clap::Clap;
+use std::{fs::create_dir_all, path::PathBuf};
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
+
+#[derive(Clap, Debug)]
+#[clap(
+    version = VERSION,
+    author = AUTHOR,
+)]
+/// Neural networks trained with genetic algorithm to play connect four
+struct Opts {
+    #[clap(subcommand)]
+    subcmd: Subcommands,
+}
+
+#[derive(Clap, Debug)]
+enum Subcommands {
+    #[clap(about = "Train the neural network")]
+    Train(Train),
+    #[clap(about = "Play against the neural network")]
+    PlayAi(PlayAi),
+    #[clap(about = "Play against another play, locallaly (no ai)")]
+    PlayLocal(PlayLocal),
+}
+
+#[derive(Clap, Debug)]
+struct PlayLocal {}
+
+#[derive(Clap, Debug)]
+struct PlayAi {
+    #[clap(short = 'n', long = "generation", default_value = "-1")]
+    /// Generation to play against, `-1` for the lastest generation
+    generation_num: i32,
+
+    #[clap(short = 'f', long = "ai-first")]
+    /// Make the AI go first (i.e. play as yellow)
+    ai_first: bool,
+
+    #[clap(short = 'p', long = "save-path", default_value = "./saves/gen")]
+    /// Generation path to load from. Generation number is added to the end of the filename.
+    /// E.g. `./saves/gen2500` is loaded for generation 2500 if `save-path` is `./saves/gen`
+    save_path: PathBuf,
+}
+
+#[derive(Clap, Debug)]
+struct Train {
+    #[clap(short = 'p', long = "save-path", default_value = "./saves/gen")]
+    /// Generation save path.
+    ///
+    /// Generation number is added to the end of the filename.
+    /// E.g. `./saves/gen2500` is saved for generation 2500 if `save-path` is `./saves/gen`
+    save_path: PathBuf,
+
+    #[clap(short = 's', long = "surviving", default_value = "7")]
+    /// The surviving population that lives into the next generation
+    surviving: usize,
+    #[clap(short = 'm', long = "mutation-amount", default_value = "3")]
+    /// Mutation amount, how many copies of (random) mutated parents to make
+    mutation_amount: usize,
+    #[clap(short = 'M', long = "mutation-range", default_value = "0.05")]
+    /// Mutation range, i.e. how much to mutate each weight by
+    mutation_range: f32,
+    #[clap(short = 'c', long = "crossover-amount", default_value = "1")]
+    /// Number of times to crossover each of the surviving top networks
+    crossover_amount: usize,
+    #[clap(short = 'g', long = "generations", default_value = "-1")]
+    /// Number of generations to train for.
+    /// Use `-1` to train indefinitely, until stopped (i.e. interrupt)
+    generations: isize,
+    #[clap(short = 'i', long = "save-interval", default_value = "250")]
+    /// Interval to save the generations.
+    /// Use `-1` to never save.
+    save_interval: isize,
+    #[clap(short = 'I', long = "compare-interval", default_value = "-1")]
+    /// Interval to compare the neural network population to a random agent.
+    /// Use `-1` to never compare.
+    compare_interval: isize,
+    #[clap(short = 'S', long = "structure", multiple=true, default_values = &["42", "91", "91", "91", "7"])]
+    /// Structure of the neural network. Must begin with 42 and end with 7 (board input and
+    /// outputs)
+    structure: Vec<usize>,
+    #[clap(
+        short = 'a',
+        long = "activations",
+        multiple=true,
+        default_values = &["sigmoid", "sigmoid", "sigmoid", "sigmoid"],
+        possible_values = &["sigmoid", "elu", "relu"]
+    )]
+    /// Activation functions to use between layers.
+    /// Must be the same length as the structure minus 1.
+    activations: Vec<String>,
+}
 
 fn main() {
-    loop {
-        print!(
-            r#"{}1) Play against the latest AI
-{}2) Play against another person (local)
-{}3) Train the ai
-{}q) Exit{}
+    let opt = Opts::parse();
+    match opt.subcmd {
+        Subcommands::Train(config) => {
+            create_dir_all(
+                config
+                    .save_path
+                    .parent()
+                    .expect("Invalid save path provided"),
+            )
+            .expect("Failed create new saves folder");
 
-Enter the code: "#,
-            BLUE!(),
-            GREEN!(),
-            RED!(),
-            CYAN!(),
-            RESET!()
-        );
+            let activations = config
+                .activations
+                .into_iter()
+                .map(|a_str| Activation::from_string(&a_str))
+                .collect::<Vec<_>>();
 
-        stdout().flush().expect("Failed to flush to stdout");
-        let mut command = String::new();
-        stdin()
-            .read_line(&mut command)
-            .expect("Did not enter a correct string");
+            let props = pool_props! {
+                surviving_amount => config.surviving,
+                mutation_amount => config.mutation_amount,
+                mutation_range => config.mutation_range,
+                crossover_amount => config.crossover_amount,
+                structure => config.structure,
+                activations => activations,
+                generations => config.generations,
+                save_interval => config.save_interval,
+                compare_interval => config.compare_interval,
+                file_path => config.save_path
+            };
 
-        command = command.chars().filter(|c| !c.is_whitespace()).collect();
-
-        match &command[..] {
-            "1" => {
-                match game::play_against_ai::<NNPlayer>(path::Path::new("./saves/gen")) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!("{}Failed: {}", RED!(), e);
-                        std::process::exit(1);
-                    }
-                };
-            }
-
-            "2" => {
-                game::start_two_player();
-            }
-
-            "3" => {
-                let props = pool_props! {
-                    surviving_amount => 7,
-                    mutation_amount => 3,
-                    mutation_range => 0.05,
-                    crossover_amount => 1,
-                    structure => vec![42, 91, 91, 91, 7],
-                    activations => vec! [
-                        ai::nn::Activation::Sigmoid,
-                        ai::nn::Activation::Sigmoid,
-                        ai::nn::Activation::Sigmoid,
-                        ai::nn::Activation::Sigmoid,
-                    ],
-                    generations => 100000000,
-                    save_interval => 250,
-                    compare_interval => 100000000000000,
-                    file_path => path::PathBuf::from("./saves/gen")
-                };
-
-                create_dir_all("saves/").expect("Failed create new saves folder");
-
-                let mut pool: Pool<NNPlayer> = Pool::new(props);
-                match pool.start() {
-                    Ok(_) => {}
-                    Err(e) => {
-                        eprintln!("{}Failed: {}", RED!(), e);
-                        std::process::exit(1);
-                    }
+            let mut pool: Pool<NNPlayer> = Pool::new(props);
+            match pool.start() {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("{}Failed: {}", RED!(), e);
+                    std::process::exit(1);
                 }
             }
-
-            "q" | "Q" => {
-                println!("Quitting...");
-                std::process::exit(0);
-            }
-
-            _ => {
-                println!("\x1b[2J\x1b[HInvalid option `{}`\n", command);
-            }
+        }
+        Subcommands::PlayAi(config) => {
+            match game::play_against_ai::<NNPlayer>(&config.save_path, config.ai_first) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("{}Failed: {}", RED!(), e);
+                    std::process::exit(1);
+                }
+            };
+        }
+        Subcommands::PlayLocal(_) => {
+            game::start_two_player();
         }
     }
 }

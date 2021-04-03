@@ -313,10 +313,16 @@ pub fn start_two_player() {
 
 pub fn play_against_ai<Plr: Player + DeserializeOwned>(
     ai_path: &path::Path,
+    ai_first: bool,
 ) -> Result<(), Box<dyn Error>> {
     let mut board = Board::new();
-    let mut current_player = Spot::RED;
-    let ai_turn = Spot::YELLOW;
+    let (mut current_player, ai_turn) = if !ai_first {
+        // Ai is yellow
+        (Spot::RED, Spot::YELLOW)
+    } else {
+        // Ai is red
+        (Spot::YELLOW, Spot::RED)
+    };
     let mut fail = "";
 
     let nn: Plr = match helpers::get_max_generation(ai_path)? {

@@ -9,12 +9,23 @@ use crate::matrix;
 pub enum Activation {
     Sigmoid,
     ELU,
+    RELU,
 }
 
 impl Activation {
+    pub fn from_string(s: &str) -> Activation {
+        match s {
+            "sigmoid" => Activation::Sigmoid,
+            "elu" => Activation::ELU,
+            "relu" => Activation::RELU,
+            _ => panic!("invalid activation: {}", s),
+        }
+    }
+
     fn as_fn(&self) -> &(dyn Fn(N) -> N + Sync) {
         match self {
             Activation::Sigmoid => &&|x: N| 1.0 / (1.0 + std::f32::consts::E.powf(-x)),
+            Activation::RELU => &&|x: N| if x > 0.0 { x } else { 0.0 },
             Activation::ELU => &&|x: N| {
                 if x >= 0.0 {
                     x

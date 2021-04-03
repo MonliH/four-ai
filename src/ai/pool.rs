@@ -16,7 +16,7 @@ use super::{
 use crate::game;
 use crate::helpers;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PoolProperties {
     /// Amount of agents to retain per generations
     /// This means the number that die off is
@@ -40,10 +40,10 @@ pub struct PoolProperties {
     pub structure: Vec<usize>,
     pub activations: Vec<nn::Activation>,
 
-    pub generations: usize,
+    pub generations: isize,
 
-    pub save_interval: usize,
-    pub compare_interval: usize,
+    pub save_interval: isize,
+    pub compare_interval: isize,
     pub file_path: path::PathBuf,
 }
 
@@ -63,7 +63,7 @@ macro_rules! pool_props {
     };
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Pool<Plr: Player> {
     agents: Vec<Agent<Plr>>,
     generation: usize,
@@ -200,48 +200,18 @@ where
         self.agents.append(new_pop);
     }
 
-    pub fn start(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("{}Looking for previous saves...{}", BLUE!(), RESET!());
-        let start: usize =
-            if let Some(val) = helpers::get_max_generation(&self.properties.file_path)? {
-                let filename = val.file_name();
-                let os_to_str = filename.to_str().unwrap();
-                let gen = os_to_str
-                    .split("_")
-                    .last()
-                    .unwrap()
-                    .parse::<usize>()
-                    .unwrap();
-                print!(
-                    "{}Detected generation {}, starting from there... {}",
-                    BLUE!(),
-                    gen,
-                    RESET!()
-                );
-                let file = File::open(val.path())?;
-                let mut new_pop: Vec<Agent<Plr>> = serde_cbor::from_reader(file)?;
-                self.mutate_crossover(&mut new_pop);
-                println!("{}Loaded generations{}", BLUE!(), RESET!());
-                println!(
-                    "{}Starting with a population of {}{}",
-                    GREEN!(),
-                    self.agents.len(),
-                    RESET!()
-                );
-                gen
-            } else {
-                println!(
-                    "{}Starting with a population of {}{}",
-                    GREEN!(),
-                    self.properties.total_pop.unwrap(),
-                    RESET!()
-                );
-                0
-            };
+    #[inline(always)]
+    pub fn get_range(s: usize, e: isize) -> Box<dyn Iterator<Item = usize>> {
+        if e <= -1 {
+            Box::new((s..).into_iter())
+        } else {
+            Box::new((s..(e as usize)).into_iter())
+        }
+    }
 
-        println!("");
-
-        for gen in start..self.properties.generations {
+    #[inline(always)]
+    pub fn training_loop(&mut self, start: usize) -> Result<(), Box<dyn Error>> {
+        for gen in Self::get_range(start, self.properties.generations) {
             self.generation = gen;
 
             // Generation loop
@@ -274,7 +244,10 @@ where
                 .collect::<Vec<_>>();
             self.agents.clear();
 
-            if self.generation % self.properties.save_interval == 0 {
+            if self.properties.save_interval >= 0
+                && self.generation != 0
+                && self.generation % (self.properties.save_interval as usize) == 0
+            {
                 print!(
                     "{}Writing generation {}... {}",
                     BLUE!(),
@@ -303,7 +276,10 @@ where
                 );
             }
 
-            if self.generation % self.properties.compare_interval == 0 {
+            if self.properties.compare_interval >= 0
+                && self.generation != 0
+                && self.generation % (self.properties.compare_interval as usize) == 0
+            {
                 print!(
                     "{}Calculating fitness relative to population...{} ",
                     BLUE!(),
@@ -332,5 +308,50 @@ where
             );
         }
         Ok(())
+    }
+
+    pub fn start(&mut self) -> Result<(), Box<dyn Error>> {
+        println!("{}Looking for previous saves...{}", BLUE!(), RESET!());
+        let start: usize =
+            if let Some(val) = helpers::get_max_generation(&self.properties.file_path)? {
+                let filename = val.file_name();
+                let os_to_str = filename.to_str().unwrap();
+                let gen = os_to_str
+                    .split("_")
+                    .last()
+                    .unwrap()
+                    .parse::<usize>()
+                    .unwrap();
+                print!(
+                    "{}Detected generation {}, starting from there... {}",
+                    BLUE!(),
+                    gen,
+                    RESET!()
+                );
+                let file = File::open(val.path())?;
+                let mut new_pop: Vec<Agent<Plr>> = serde_cbor::from_reader(file)?;
+                self.agents.clear();
+                self.mutate_crossover(&mut new_pop);
+                println!("{}Loaded generations{}", BLUE!(), RESET!());
+                println!(
+                    "{}Starting with a population of {}{}",
+                    GREEN!(),
+                    self.agents.len(),
+                    RESET!()
+                );
+                gen
+            } else {
+                println!(
+                    "{}Starting with a population of {}{}",
+                    GREEN!(),
+                    self.properties.total_pop.unwrap(),
+                    RESET!()
+                );
+                0
+            };
+
+        println!("");
+
+        self.training_loop(start)
     }
 }
