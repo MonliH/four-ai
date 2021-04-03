@@ -1,4 +1,4 @@
-use std::cmp::{Reverse, Ordering};
+use std::cmp::{Ordering, Reverse};
 use std::error::Error;
 use std::fs::{create_dir_all, File};
 use std::path;

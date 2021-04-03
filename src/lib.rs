@@ -4,7 +4,7 @@
 mod color;
 
 #[macro_use]
-mod ai;
+pub mod ai;
 
 mod game;
 mod helpers;
