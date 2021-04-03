@@ -4,21 +4,45 @@ extern crate fourai;
 
 use fourai::matrix::Matrix;
 
-fn generate_sq(size: usize) -> Matrix<u32> {
-    let mut val = vec![vec![0; size]; size];
+fn generate_sq(size: usize) -> Matrix<f32> {
+    let mut val = vec![0.0; size * size];
 
     let possibles = [
-        1123, 192, 999, 2, 1, 329, 1, 223, 2, 123, 456, 123, 75, 2, 5, 8, 1, 2, 3, 4, 5, 123214215,
-        123, 24, 123, 1,
+        1123.0,
+        192.0,
+        999.0,
+        2.0,
+        1.0,
+        329.0,
+        1.0,
+        223.0,
+        2.0,
+        123.0,
+        456.0,
+        123.0,
+        75.0,
+        2.0,
+        5.0,
+        8.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        123214215.0,
+        123.0,
+        24.0,
+        123.0,
+        1.0,
     ];
 
     for i in 0..size {
         for j in 0..size {
-            val[i][j] = possibles[(size * i + j) % possibles.len()];
+            val[i * size + j] = possibles[(size * i + j) % possibles.len()];
         }
     }
 
-    Matrix::from(val)
+    Matrix::from(val, size, size)
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

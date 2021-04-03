@@ -65,18 +65,18 @@ Enter the code: "#,
                 let props = pool_props! {
                     surviving_amount => 5,
                     mutation_amount => 3,
-                    mutation_range => 0.075,
+                    mutation_range => 0.001,
                     crossover_amount => 1,
-                    structure => vec![42, 128, 256, 128, 7],
+                    structure => vec![42, 91, 91, 91, 7],
                     activations => vec! [
                         ai::nn::Activation::Sigmoid,
-                        ai::nn::Activation::ELU,
-                        ai::nn::Activation::ELU,
+                        ai::nn::Activation::Sigmoid,
+                        ai::nn::Activation::Sigmoid,
                         ai::nn::Activation::Sigmoid,
                     ],
-                    generations => 10000,
-                    save_interval => 10,
-                    compare_interval => 1,
+                    generations => 100000000,
+                    save_interval => 500,
+                    compare_interval => 100000000000000,
                     file_path => path::PathBuf::from("./saves/gen")
                 };
 

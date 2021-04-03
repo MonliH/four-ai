@@ -1,12 +1,39 @@
+use libc::c_int;
+use rblas::attribute::Transpose;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Mul};
+
+impl<T> rblas::Matrix<T> for Matrix<T>
+where
+    T: Add<Output = T>,
+{
+    #[inline]
+    fn rows(&self) -> c_int {
+        self.rows as c_int
+    }
+
+    #[inline]
+    fn cols(&self) -> c_int {
+        self.cols as c_int
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const T {
+        self.values.as_ptr()
+    }
+
+    #[inline]
+    fn as_mut_ptr(&mut self) -> *mut T {
+        self.values.as_mut_ptr()
+    }
+}
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Matrix<T>
 where
     T: Add<Output = T>,
 {
-    pub values: Vec<Vec<T>>,
+    pub values: Vec<T>,
     pub rows: usize,
     pub cols: usize,
 }
@@ -15,10 +42,10 @@ impl<T> Matrix<T>
 where
     T: Add<Output = T> + std::ops::AddAssign + Default + Clone,
 {
-    pub fn from(vector: Vec<Vec<T>>) -> Self {
+    pub fn from(vector: Vec<T>, rows: usize, cols: usize) -> Self {
         Matrix {
-            rows: vector.len(),
-            cols: vector.first().unwrap_or(&vec![]).len(),
+            rows,
+            cols,
             values: vector,
         }
     }
@@ -27,19 +54,16 @@ where
         Matrix {
             rows: vector.len(),
             cols: 1,
-            values: Matrix::from(vec![vector]).T().values,
+            values: vector,
         }
     }
 
+    #[inline]
     pub fn from_rand(rows: usize, columns: usize, rand_fn: &mut dyn FnMut() -> T) -> Self {
-        let mut values: Vec<Vec<T>> = Vec::with_capacity(rows);
+        let mut values: Vec<T> = Vec::with_capacity(rows * columns);
 
-        for _ in 0..rows {
-            let mut cols: Vec<T> = Vec::with_capacity(columns);
-            for _ in 0..columns {
-                cols.push(rand_fn());
-            }
-            values.push(cols);
+        for _ in 0..(rows * columns) {
+            values.push(rand_fn());
         }
 
         Matrix {
@@ -49,9 +73,9 @@ where
         }
     }
 
+    #[inline]
     pub fn alloca(rows: usize, columns: usize) -> Self {
-        let cols = vec![Default::default(); columns];
-        let values = vec![cols; rows];
+        let values = vec![Default::default(); columns * rows];
         Matrix {
             rows,
             cols: columns,
@@ -60,63 +84,54 @@ where
     }
 
     #[allow(non_snake_case)]
+    #[inline]
     pub fn T(self) -> Self {
         self.transpose()
     }
 
+    #[inline]
     fn transpose(self) -> Self {
         let mut c = Self::alloca(self.cols, self.rows);
         for i in 0..self.rows {
             for j in 0..self.cols {
-                c.values[j][i] = self.values[i][j].clone();
+                let c_idx = c.cidx(j, i);
+                c.values[c_idx] = self.values[self.cidx(i, j)].clone();
             }
         }
         c
     }
 
-    pub fn mapped<C: Fn(T) -> T + Sync>(self, func: &C) -> Self {
-        Matrix {
-            cols: self.cols,
-            rows: self.rows,
-            values: self
-                .values
-                .into_iter()
-                .map(|row| row.into_iter().map(|x| func(x)).collect::<Vec<_>>())
-                .collect(),
+    pub fn map(&mut self, func: &mut dyn FnMut(T) -> T) {
+        for item in self.values.iter_mut() {
+            *item = func(item.clone())
         }
     }
 
-    pub fn map(&mut self, func: &mut dyn FnMut(T) -> T) {
-        self.values = self
-            .values
-            .iter()
-            .map(|row| row.into_iter().map(|x| func(x.clone())).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-    }
-
     pub fn map_enumerate(&mut self, func: &mut dyn FnMut(usize, usize, T) -> T) {
-        self.values = self
-            .values
-            .iter()
-            .enumerate()
-            .map(|(i, row)| {
-                row.into_iter()
-                    .enumerate()
-                    .map(|(j, x)| func(i, j, x.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                let idx = self.cidx(i, j);
+                self.values[idx] = func(i, j, self.values[idx].clone())
+            }
+        }
     }
 
-    pub fn push(&mut self, value: Vec<T>) {
-        assert_eq!(value.len(), self.cols);
+    #[inline]
+    pub fn cidx(&self, row: usize, col: usize) -> usize {
+        row * self.cols + col
+    }
+
+    #[inline]
+    pub fn push(&mut self, values: &mut Vec<T>) {
+        debug_assert_eq!(values.len(), self.cols);
 
         self.rows += 1;
-        self.values.push(value);
+        self.values.append(values);
     }
 
+    #[inline]
     pub fn get(&self, row: usize, col: usize) -> T {
-        self.values[row][col].clone()
+        self.values[self.cidx(row, col)].clone()
     }
 }
 
@@ -126,12 +141,11 @@ where
 {
     type Output = Matrix<T>;
 
+    #[inline]
     fn add(mut self, other: Matrix<T>) -> Matrix<T> {
-        assert_eq!(self.values.len(), other.values.len());
-        for (i, value) in other.values.into_iter().enumerate() {
-            for (j, actual_val) in value.into_iter().enumerate() {
-                self.values[i][j] += actual_val;
-            }
+        debug_assert_eq!(self.values.len(), other.values.len());
+        for (i, other) in other.values.into_iter().enumerate() {
+            self.values[i] += other;
         }
 
         self
@@ -144,14 +158,27 @@ where
 {
     type Output = Matrix<T>;
 
+    #[inline]
     fn add(mut self, other: T) -> Matrix<T> {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.values[i][j] += other.clone();
-            }
+        for i in 0..(self.rows * self.cols) {
+            self.values[i] += other.clone();
         }
 
         self
+    }
+}
+
+pub trait Bound {
+    fn upper() -> Self;
+    fn lower() -> Self;
+}
+
+impl Bound for f32 {
+    fn upper() -> Self {
+        1.0
+    }
+    fn lower() -> Self {
+        0.0
     }
 }
 
@@ -163,7 +190,9 @@ where
         + Default
         + Clone
         + std::fmt::Debug
-        + std::ops::AddAssign,
+        + std::ops::AddAssign
+        + Bound
+        + rblas::Gemm,
 {
     type Output = Matrix<T>;
 
@@ -178,35 +207,23 @@ where
                 Set Cij ← sum
     Return C
     */
+    #[inline]
     fn mul(self, other: Matrix<T>) -> Matrix<T> {
         // m has to be equal to m
-        assert_eq!(self.cols, other.rows);
-
-        let a = self;
-        let b = other;
-
-        // n = self.rows
-        // m = self.cols OR other.rows
-        // p = other.cols
-        // Defined for clarity
-        let n = a.rows;
-        let m = a.cols;
-        let p = b.cols;
-
-        // Allocate output array size
-        let mut c = Self::alloca(a.cols, b.cols);
-
-        for i in 0..n {
-            for j in 0..p {
-                let mut sum: T = Default::default();
-                for k in 0..m {
-                    sum += a.values[i][k].clone() * b.values[k][j].clone()
-                }
-                c.values[i][j] = sum;
-            }
-        }
-
-        c
+        debug_assert_eq!(self.cols, other.rows);
+        let n = self.rows;
+        let p = other.cols;
+        let mut target = Matrix::alloca(n, p);
+        rblas::Gemm::gemm(
+            &T::upper(),
+            Transpose::NoTrans,
+            &self,
+            Transpose::NoTrans,
+            &other,
+            &T::lower(),
+            &mut target,
+        );
+        target
     }
 }
 
@@ -218,7 +235,9 @@ where
         + Default
         + Clone
         + std::fmt::Debug
-        + std::ops::AddAssign,
+        + std::ops::AddAssign
+        + Bound
+        + rblas::Gemm,
 {
     type Output = Matrix<T>;
 
@@ -233,35 +252,23 @@ where
                 Set Cij ← sum
     Return C
     */
+    #[inline]
     fn mul(self, other: &Matrix<T>) -> Matrix<T> {
         // m has to be equal to m
-        assert_eq!(self.cols, other.rows);
-
-        let a = self;
-        let b = other;
-
-        // n = self.rows
-        // m = self.cols OR other.rows
-        // p = other.cols
-        // Defined for clarity
-        let n = a.rows;
-        let m = a.cols;
-        let p = b.cols;
-
-        // Allocate output array size
-        let mut c = Matrix::alloca(n, p);
-
-        for i in 0..n {
-            for j in 0..p {
-                let mut sum: T = Default::default();
-                for k in 0..m {
-                    sum += a.values[i][k].clone() * b.values[k][j].clone()
-                }
-                c.values[i][j] = sum;
-            }
-        }
-
-        c
+        debug_assert_eq!(self.cols, other.rows);
+        let n = self.rows;
+        let p = other.cols;
+        let mut target = Matrix::alloca(n, p);
+        rblas::Gemm::gemm(
+            &T::upper(),
+            Transpose::NoTrans,
+            self,
+            Transpose::NoTrans,
+            other,
+            &T::lower(),
+            &mut target,
+        );
+        target
     }
 }
 
@@ -271,11 +278,10 @@ where
 {
     type Output = Matrix<T>;
 
+    #[inline]
     fn mul(mut self, other: T) -> Matrix<T> {
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                self.values[i][j] *= other.clone();
-            }
+        for i in 0..(self.rows * self.cols) {
+            self.values[i] *= other.clone();
         }
 
         self
@@ -286,15 +292,17 @@ where
 macro_rules! mat {
     ($($($e: expr),+);*) => {{
         let mut vec = Vec::new();
+        let mut total = 0;
+        let mut rows = 0;
         $(
-            let mut row = Vec::new();
             $(
-                row.push($e);
+                vec.push($e);
+                total += 1;
             )+
-            vec.push(row);
+            rows += 1;
         )*
 
-        Matrix::from(vec)
+        Matrix::from(vec, rows, total / rows)
     }};
 }
 
@@ -318,21 +326,21 @@ mod matrix_tests {
     #[test]
     fn mul_matrices_1() {
         // 3 by 3
-        let first_mat = mat![1, 2, 3; 1, 2, 3; 1, 2, 3];
+        let first_mat = mat![1.0, 2.0, 3.0; 1.0, 2.0, 3.0; 1.0, 2.0, 3.0];
 
         // 3 by 1
-        let second_mat = mat![2; 10; 3];
-        assert_eq!(first_mat * second_mat, mat![31; 31; 31]);
+        let second_mat = mat![2.0; 10.0; 3.0];
+        assert_eq!(first_mat * second_mat, mat![31.0; 31.0; 31.0]);
     }
 
     #[test]
     fn mul_matrices_2() {
         // 2 by 2
-        let first_mat = mat![1, 2; 2, 1];
+        let first_mat = mat![1.0, 2.0; 2.0, 1.0];
 
         // 2 by 2
-        let second_mat = mat![3, 1; 1, 3];
-        assert_eq!(first_mat * second_mat, mat![5, 7; 7, 5]);
+        let second_mat = mat![3.0, 1.0; 1.0, 3.0];
+        assert_eq!(first_mat * second_mat, mat![5.0, 7.0; 7.0, 5.0]);
     }
 
     #[test]

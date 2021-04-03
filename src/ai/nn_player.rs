@@ -1,8 +1,7 @@
 use crate::game;
 use rand::Rng;
 
-use crate::ai::nn;
-use crate::ai::Player;
+use super::{nn, Player, N};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -17,17 +16,17 @@ impl Player for NNPlayer {
         }
     }
 
-    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> Vec<f64> {
+    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> Vec<N> {
         let flattened_board = board
             .iter()
             .flatten()
             .map(|x| x.into_rep())
             .collect::<Vec<_>>();
 
-        self.nn.forward(flattened_board).T().values.remove(0)
+        self.nn.forward(flattened_board).T().values
     }
 
-    fn mutate(&mut self, mutation_range: f64) {
+    fn mutate(&mut self, mutation_range: N) {
         let mut rng = rand::thread_rng();
         for i in 0..self.nn.weights.len() {
             self.nn.weights[i].map(&mut |x| x + rng.gen_range(-mutation_range, mutation_range));

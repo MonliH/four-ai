@@ -1,7 +1,6 @@
 use rand::Rng;
 
-use crate::ai::nn;
-use crate::ai::Player;
+use super::{nn, Player, N};
 use crate::game;
 
 #[derive(Clone, Debug)]
@@ -18,8 +17,8 @@ impl Player for RandomPlayer {
         Self {}
     }
 
-    fn get_move(&self, _board: [[game::Spot; 6]; 7]) -> Vec<f64> {
+    fn get_move(&self, _board: [[game::Spot; 6]; 7]) -> Vec<N> {
         let mut rng = rand::thread_rng();
-        (0..42).map(|_| rng.gen_range(0f64, 1f64)).collect()
+        (0..42).map(|_| rng.gen_range(0.0, 1.0)).collect()
     }
 }

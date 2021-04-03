@@ -9,9 +9,9 @@ use rayon::prelude::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_cbor;
 
-use crate::ai::{
+use super::{
     agent::{Agent, Player},
-    nn, RandomPlayer,
+    nn, RandomPlayer, N,
 };
 use crate::game;
 use crate::helpers;
@@ -27,7 +27,7 @@ pub struct PoolProperties {
     pub mutation_amount: usize,
 
     /// Range of mutations on weights
-    pub mutation_range: f64,
+    pub mutation_range: N,
 
     /// Amount of crossovers to do per agent
     pub crossover_amount: usize,
@@ -90,14 +90,9 @@ where
         }
     }
 
-    fn play<P1: Player, P2: Player>(
-        &self,
-        player1: &Agent<P1>,
-        player2: &Agent<P2>,
-    ) -> (game::Spot, i32) {
+    fn play<P1: Player, P2: Player>(&self, player1: &Agent<P1>, player2: &Agent<P2>) -> game::Spot {
         let mut board = game::Board::new();
         let mut current_color = game::Spot::RED;
-        let mut moves = 0;
         let winner: game::Spot;
 
         'outer: loop {
@@ -108,7 +103,6 @@ where
             };
 
             let mut ai_moves = temp.iter().enumerate().collect::<Vec<_>>();
-            moves += 1;
             'inner: loop {
                 let idx = ai_moves
                     .iter()
@@ -138,7 +132,7 @@ where
             };
         }
 
-        (winner, moves)
+        winner
     }
 
     fn get_fitness<P1: Player, P2: Player>(
@@ -147,32 +141,32 @@ where
         player2: &Agent<P2>,
     ) -> (i32, i32) {
         let (x, y) = match self.play(player1, player2) {
-            (game::Spot::RED, moves) => {
+            game::Spot::RED => {
                 // player1 wins
-                (45 - moves, 0)
+                (3, 0)
             }
-            (game::Spot::YELLOW, moves) => {
+            game::Spot::YELLOW => {
                 // player2 wins
-                (0, 45 - moves)
+                (0, 3)
             }
-            (game::Spot::EMPTY, moves) => {
+            game::Spot::EMPTY => {
                 // tie
-                (45 - moves, 45 - moves)
+                (1, 1)
             }
         };
 
         let (temp2, temp1) = match self.play(player2, player1) {
-            (game::Spot::RED, moves) => {
+            game::Spot::RED => {
                 // player1 wins
-                (45 - moves, 0)
+                (3, 0)
             }
-            (game::Spot::YELLOW, moves) => {
+            game::Spot::YELLOW => {
                 // player2 wins
-                (0, 45 - moves)
+                (0, 3)
             }
-            (game::Spot::EMPTY, moves) => {
+            game::Spot::EMPTY => {
                 // tie
-                (45 - moves, 45 - moves)
+                (1, 1)
             }
         };
 
@@ -311,11 +305,7 @@ where
                 );
                 let mut random_fitness = 0;
                 for agent in self.agents.iter() {
-                    let fitness_first = self.get_fitness(agent, &Agent::new(RandomPlayer::new())).0;
-                    let fitness_second =
-                        self.get_fitness(&Agent::new(RandomPlayer::new()), agent).1;
-                    random_fitness += fitness_first;
-                    random_fitness += fitness_second;
+                    random_fitness += self.get_fitness(agent, &Agent::new(RandomPlayer::new())).0;
                 }
                 println!("{}Fitness of {}{}", GREEN!(), random_fitness, RESET!());
             }

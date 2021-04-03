@@ -9,6 +9,7 @@ use std::process;
 use serde::de::DeserializeOwned;
 
 use crate::ai::agent::{Agent, Player};
+use crate::ai::N;
 use crate::helpers;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -47,7 +48,7 @@ impl Spot {
         }
     }
 
-    pub fn into_rep(&self) -> f64 {
+    pub fn into_rep(&self) -> N {
         match self {
             Spot::RED => 1.0,
             Spot::YELLOW => -1.0,
