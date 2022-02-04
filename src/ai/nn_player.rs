@@ -1,8 +1,9 @@
-use crate::game;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 
 use super::{nn, Player, N};
-use serde::{Deserialize, Serialize};
+use crate::game;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NNPlayer {
@@ -16,33 +17,40 @@ impl Player for NNPlayer {
         }
     }
 
-    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> Vec<N> {
+    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> [N; 7] {
         let flattened_board = board
             .iter()
             .flatten()
             .map(|x| x.into_rep())
             .collect::<Vec<_>>();
 
-        self.nn.forward(flattened_board).T().values
+        self.nn
+            .forward(flattened_board)
+            .T()
+            .values
+            .try_into()
+            .unwrap()
     }
 
-    fn mutate(&mut self, mutation_range: N) {
-        let mut rng = rand::thread_rng();
+    fn mutate(&mut self, mutation_range: N, mutation_prob: N) {
+        let mut rng = rand::thread_rng(); //rng::thread_rng();
         for i in 0..self.nn.weights.len() {
-            self.nn.weights[i].map(&mut |x| x + rng.gen_range(-mutation_range, mutation_range));
+            self.nn.weights[i].map(&mut |x| {
+                if rng.gen::<N>() < mutation_prob {
+                    x + rng.gen_range(-mutation_range, mutation_range)
+                } else {
+                    x
+                }
+            });
         }
     }
 
     fn crossover(&mut self, other: &Self) {
         let mut rng = rand::thread_rng();
         for i in 0..self.nn.weights.len() {
-            self.nn.weights[i].map_enumerate(&mut |j, k, x| {
-                if rng.gen_range(0.0, 1.0) > 0.7 {
-                    other.nn.weights[i].get(j, k)
-                } else {
-                    x
-                }
-            });
+            if rng.gen::<f32>() < 0.5 {
+                self.nn.weights[i] = other.nn.weights[i].clone();
+            }
         }
     }
 }

@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 
 pub trait Player {
     fn new_from_param(structure: Vec<usize>, activations: Vec<nn::Activation>) -> Self;
-    fn mutate(&mut self, _mutation_range: N) {}
+    fn mutate(&mut self, _mutation_range: N, _mutation_prob: N) {}
     fn crossover(&mut self, _other: &Self) {}
-    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> Vec<N>;
+    fn get_move(&self, board: [[game::Spot; 6]; 7]) -> [N; 7];
 }
 
 #[derive(Serialize, Deserialize, Clone)]

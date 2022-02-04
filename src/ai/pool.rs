@@ -23,19 +23,18 @@ pub struct PoolProperties {
     /// total_pos - surviving_amount
     pub surviving_amount: usize,
 
-    /// Amount of mutations to do per agent
-    pub mutation_amount: usize,
-
     /// Range of mutations on weights
     pub mutation_range: N,
+    /// Probability that a mutation occurs
+    pub mutation_prob: N,
 
-    /// Amount of crossovers to do per agent
-    pub crossover_amount: usize,
+    /// Number of crossed over agents
+    pub crossover_size: usize,
 
     /// Total population of pool
     /// Most are killed off
     /// Calculated through (surviving_amount * surviving_amount - surviving_amount)* crossover_amount * mutation_amount
-    pub total_pop: Option<usize>,
+    pub population_size: usize,
 
     pub structure: Vec<usize>,
     pub activations: Vec<nn::Activation>,
@@ -45,22 +44,6 @@ pub struct PoolProperties {
     pub save_interval: isize,
     pub compare_interval: isize,
     pub file_path: path::PathBuf,
-}
-
-#[macro_export]
-macro_rules! pool_props {
-    ($($prop_name:ident => $value:expr),+) => {
-        {
-            $(let $prop_name = $value;)+
-            let mut properties = PoolProperties {
-                $($prop_name,)+
-                total_pop: None
-            };
-
-            properties.total_pop = Some((properties.surviving_amount * properties.surviving_amount - properties.surviving_amount) * properties.mutation_amount * properties.crossover_amount + properties.surviving_amount);
-            properties
-        }
-    };
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -75,8 +58,8 @@ where
     Plr: Player + Clone + Serialize + DeserializeOwned + Sync + Send,
 {
     pub fn new(properties: PoolProperties) -> Pool<Plr> {
-        let mut agents = Vec::with_capacity(properties.total_pop.unwrap());
-        for _ in 0..properties.total_pop.unwrap() {
+        let mut agents = Vec::with_capacity(properties.population_size);
+        for _ in 0..properties.population_size {
             agents.push(Agent::new(Plr::new_from_param(
                 properties.structure.clone(),
                 properties.activations.clone(),
@@ -90,27 +73,30 @@ where
         }
     }
 
-    fn play<P1: Player, P2: Player>(&self, player1: &Agent<P1>, player2: &Agent<P2>) -> game::Spot {
+    fn play<P1: Player, P2: Player>(
+        &self,
+        player1: &Agent<P1>,
+        player2: &Agent<P2>,
+    ) -> (game::Spot, usize) {
         let mut board = game::Board::new();
         let mut current_color = game::Spot::RED;
         let winner: game::Spot;
 
         'outer: loop {
-            let temp = if current_color == game::Spot::RED {
+            let mut temp = if current_color == game::Spot::RED {
                 player1.player.get_move(board.positions)
             } else {
                 player2.player.get_move(board.positions)
             };
 
-            let mut ai_moves = temp.iter().enumerate().collect::<Vec<_>>();
             'inner: loop {
-                let idx = ai_moves
+                let idx = temp
                     .iter()
                     .enumerate()
-                    .max_by(|(_, a), (_, b)| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
-                    .unwrap_or((0, &(0, &1.0)));
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap_or(Ordering::Equal))
+                    .unwrap();
 
-                match board.insert_top((idx.1).0, current_color) {
+                match board.insert_top(idx.0, current_color) {
                     (true, Some(win)) => {
                         winner = win;
                         break 'outer;
@@ -119,8 +105,7 @@ where
                         break 'inner;
                     }
                     (_, _) => {
-                        let idx = idx.0;
-                        ai_moves.remove(idx);
+                        temp[idx.0] = -100000.0;
                     }
                 };
             }
@@ -132,7 +117,7 @@ where
             };
         }
 
-        winner
+        (winner, board.moves())
     }
 
     fn get_fitness<P1: Player, P2: Player>(
@@ -140,64 +125,74 @@ where
         player1: &Agent<P1>,
         player2: &Agent<P2>,
     ) -> (i32, i32) {
-        let (x, y) = match self.play(player1, player2) {
+        let win_amount = 1;
+        let (winner1, moves1) = self.play(player1, player2);
+        let (x, y) = match winner1 {
             game::Spot::RED => {
                 // player1 wins
-                (3, -3)
+                (win_amount, -win_amount)
             }
             game::Spot::YELLOW => {
                 // player2 wins
-                (-3, 3)
+                (-win_amount, win_amount)
             }
             game::Spot::EMPTY => {
                 // tie
-                (1, 1)
+                (0, 0)
             }
         };
 
-        let (temp2, temp1) = match self.play(player2, player1) {
+        let (winner2, moves2) = self.play(player2, player1);
+        let (temp2, temp1) = match winner2 {
             game::Spot::RED => {
                 // player1 wins
-                (3, -3)
+                (win_amount, -win_amount)
             }
             game::Spot::YELLOW => {
                 // player2 wins
-                (-3, 3)
+                (-win_amount, win_amount)
             }
             game::Spot::EMPTY => {
                 // tie
-                (1, 1)
+                (0, 0)
             }
         };
 
-        (x + temp1, y + temp2)
+        let move_fitness = 0;
+        (x + temp1 + move_fitness, y + temp2 + move_fitness)
     }
 
     fn mutate_crossover(&mut self, new_pop: &mut Vec<Agent<Plr>>) {
-        for i in 0..new_pop.len() {
+        'crossover: for i in 0..new_pop.len() {
             for k in 0..new_pop.len() {
                 if i != k {
-                    for _ in 0..self.properties.crossover_amount {
-                        let mut breed_agent = new_pop[i].clone();
-                        breed_agent.player.crossover(&new_pop[k].player);
-
-                        for _ in 0..self.properties.mutation_amount {
-                            // Yes 4 nested for loops
-                            let mut mutated_agent = breed_agent.clone();
-                            mutated_agent.player.mutate(self.properties.mutation_range);
-
-                            mutated_agent.fitness = 0;
-                            self.agents.push(mutated_agent);
-                        }
+                    if self.agents.len() < self.properties.crossover_size {
+                        let mut new_agent = new_pop[i].clone();
+                        new_agent.player.crossover(&new_pop[k].player);
+                        self.agents.push(new_agent);
+                    } else {
+                        break 'crossover;
                     }
                 }
             }
         }
 
-        for agent in new_pop.iter_mut() {
+        'copy: loop {
+            for net in new_pop.iter() {
+                if !(self.agents.len() >= self.properties.population_size) {
+                    break 'copy;
+                }
+                self.agents.push(net.clone());
+            }
+        }
+
+        for agent in self.agents.iter_mut() {
+            agent.player.mutate(
+                self.properties.mutation_range,
+                self.properties.mutation_prob,
+            );
             agent.fitness = 0;
         }
-        self.agents.append(new_pop);
     }
 
     #[inline(always)]
@@ -217,20 +212,21 @@ where
             // Generation loop
             let fitness_diffs = Arc::new(Mutex::new(vec![0; self.agents.len()]));
             (0..self.agents.len()).into_par_iter().for_each(|i| {
-                {
-                    let mut i_fitness_delta = 0;
-                    for j in 0..self.agents.len() {
-                        if i != j {
-                            // Play against each other
-                            let fitnesses = self.get_fitness(&self.agents[i], &self.agents[j]);
-                            i_fitness_delta += fitnesses.0;
-                            let mut obj = fitness_diffs.lock().unwrap();
-                            obj[j] += fitnesses.1;
-                        }
+                let mut i_fitness_delta = 0;
+                for j in 0..self.agents.len() {
+                    if i != j {
+                        // Play against each other
+                        let fitnesses = self.get_fitness(&self.agents[i], &self.agents[j]);
+                        i_fitness_delta += fitnesses.0;
+                        let mut obj = fitness_diffs.lock().unwrap();
+                        obj[j] += fitnesses.1;
+                        std::mem::drop(obj);
                     }
-                    let mut obj = fitness_diffs.lock().unwrap();
-                    obj[i] += i_fitness_delta;
                 }
+
+                let mut obj = fitness_diffs.lock().unwrap();
+                obj[i] += i_fitness_delta;
+                std::mem::drop(obj);
             });
 
             for (i, fitness_dif) in fitness_diffs.lock().unwrap().iter().enumerate() {
@@ -281,15 +277,20 @@ where
                 && self.generation % (self.properties.compare_interval as usize) == 0
             {
                 print!(
-                    "{}Calculating fitness relative to population...{} ",
+                    "{}Calculating fitness relative to dumb agent...{} ",
                     BLUE!(),
                     RESET!()
                 );
                 let mut random_fitness = 0;
-                for agent in self.agents.iter() {
+                for agent in new_pop[0..1].iter() {
                     random_fitness += self.get_fitness(agent, &Agent::new(RandomPlayer::new())).0;
                 }
-                println!("{}Fitness of {}{}", GREEN!(), random_fitness, RESET!());
+                println!(
+                    "{}Top population has a fitness of {} against dumb agent.{}",
+                    GREEN!(),
+                    random_fitness,
+                    RESET!()
+                );
             }
 
             print!(
@@ -344,7 +345,7 @@ where
                 println!(
                     "{}Starting with a population of {}{}",
                     GREEN!(),
-                    self.properties.total_pop.unwrap(),
+                    self.properties.population_size,
                     RESET!()
                 );
                 0

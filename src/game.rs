@@ -123,6 +123,10 @@ impl Board {
         }
     }
 
+    pub fn moves(&self) -> usize {
+        self.moves
+    }
+
     fn change_position(&mut self, x: usize, y: usize, spot: Spot) {
         self.positions[x][y] = spot;
     }

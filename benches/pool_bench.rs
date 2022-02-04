@@ -4,7 +4,7 @@ extern crate fourai;
 
 use fourai::ai::pool::{Pool, PoolProperties};
 use fourai::ai::NNPlayer;
-use fourai::{ai::nn::Activation, pool_props};
+use fourai::pool_props;
 
 fn gen_props(size: usize) -> PoolProperties {
     pool_props! {

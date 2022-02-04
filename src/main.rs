@@ -19,13 +19,13 @@ use crate::ai::{
 };
 
 use ai::nn::Activation;
-use clap::Clap;
+use clap::Parser;
 use std::{fs::create_dir_all, path::PathBuf};
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const AUTHOR: &'static str = env!("CARGO_PKG_AUTHORS");
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(
     version = VERSION,
     author = AUTHOR,
@@ -36,7 +36,7 @@ struct Opts {
     subcmd: Subcommands,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum Subcommands {
     #[clap(about = "Train the neural network")]
     Train(Train),
@@ -46,10 +46,10 @@ enum Subcommands {
     PlayLocal(PlayLocal),
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct PlayLocal {}
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct PlayAi {
     #[clap(short = 'n', long = "generation", default_value = "-1")]
     /// Generation to play against, `-1` for the lastest generation
@@ -65,7 +65,7 @@ struct PlayAi {
     save_path: PathBuf,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct Train {
     #[clap(short = 'p', long = "save-path", default_value = "./saves/gen")]
     /// Generation save path.
@@ -74,18 +74,21 @@ struct Train {
     /// E.g. `./saves/gen2500` is saved for generation 2500 if `save-path` is `./saves/gen`
     save_path: PathBuf,
 
-    #[clap(short = 's', long = "surviving", default_value = "7")]
+    #[clap(short = 's', long = "surviving", default_value = "5")]
     /// The surviving population that lives into the next generation
     surviving: usize,
-    #[clap(short = 'm', long = "mutation-amount", default_value = "3")]
-    /// Mutation amount, how many copies of (random) mutated parents to make
-    mutation_amount: usize,
-    #[clap(short = 'M', long = "mutation-range", default_value = "0.05")]
+    #[clap(short = 'M', long = "mutation-range", default_value = "0.015")]
     /// Mutation range, i.e. how much to mutate each weight by
     mutation_range: f32,
-    #[clap(short = 'c', long = "crossover-amount", default_value = "1")]
-    /// Number of times to crossover each of the surviving top networks
-    crossover_amount: usize,
+    #[clap(short = 'P', long = "mutation-prob", default_value = "0.05")]
+    /// Probablity of mutation, i.e. how often to mutate each weight
+    mutation_prob: f32,
+    #[clap(short = 'c', long = "crossover-size", default_value = "30")]
+    /// Number of agents that result from crossover
+    crossover_size: usize,
+    #[clap(short = 'p', long = "population-size", default_value = "200")]
+    /// Total population size
+    population_size: usize,
     #[clap(short = 'g', long = "generations", default_value = "-1")]
     /// Number of generations to train for.
     /// Use `-1` to train indefinitely, until stopped (i.e. interrupt)
@@ -94,18 +97,18 @@ struct Train {
     /// Interval to save the generations.
     /// Use `-1` to never save.
     save_interval: isize,
-    #[clap(short = 'I', long = "compare-interval", default_value = "-1")]
+    #[clap(short = 'I', long = "compare-interval", default_value = "100")]
     /// Interval to compare the neural network population to a random agent.
     /// Use `-1` to never compare.
     compare_interval: isize,
-    #[clap(short = 'S', long = "structure", multiple=true, default_values = &["42", "91", "91", "91", "7"])]
+    #[clap(short = 'S', long = "structure", multiple_values=true, default_values = &["42", "128", "256", "128", "7"])]
     /// Structure of the neural network. Must begin with 42 and end with 7 (board input and
     /// outputs)
     structure: Vec<usize>,
     #[clap(
         short = 'a',
         long = "activations",
-        multiple=true,
+        multiple_values=true,
         default_values = &["sigmoid", "sigmoid", "sigmoid", "sigmoid"],
         possible_values = &["sigmoid", "elu", "relu"]
     )]
@@ -132,17 +135,18 @@ fn main() {
                 .map(|a_str| Activation::from_string(&a_str))
                 .collect::<Vec<_>>();
 
-            let props = pool_props! {
-                surviving_amount => config.surviving,
-                mutation_amount => config.mutation_amount,
-                mutation_range => config.mutation_range,
-                crossover_amount => config.crossover_amount,
-                structure => config.structure,
-                activations => activations,
-                generations => config.generations,
-                save_interval => config.save_interval,
-                compare_interval => config.compare_interval,
-                file_path => config.save_path
+            let props = PoolProperties {
+                population_size: config.population_size,
+                mutation_prob: config.mutation_prob,
+                surviving_amount: config.surviving,
+                mutation_range: config.mutation_range,
+                crossover_size: config.crossover_size,
+                structure: config.structure,
+                activations: activations,
+                generations: config.generations,
+                save_interval: config.save_interval,
+                compare_interval: config.compare_interval,
+                file_path: config.save_path,
             };
 
             let mut pool: Pool<NNPlayer> = Pool::new(props);
